@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tebak Surah & Ayat Matrix</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 15px;
+    }
+    .card {
+      background-color: #1e293b;
+      padding: 25px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      width: 100%;
+      max-width: 450px;
+      text-align: center;
+      border: 1px solid #334155;
+    }
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      font-size: 14px;
+      color: #94a3b8;
+      font-weight: bold;
+    }
+    .volume-control {
+      background-color: #0f172a;
+      padding: 10px 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid #334155;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    .volume-control input[type=range] {
+      flex: 1;
+      cursor: pointer;
+      accent-color: #38bdf8;
+    }
+    .question-box {
+      background-color: #0f172a;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 1px solid #38bdf8;
+    }
+    .question-type {
+      font-size: 12px;
+      color: #38bdf8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .question-text {
+      font-size: 22px;
+      font-weight: bold;
+      color: #f1f5f9;
+    }
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .btn-opt {
+      background-color: #334155;
+      color: #f8fafc;
+      border: 2px solid transparent;
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-opt:hover {
+      background-color: #475569;
+      border-color: #38bdf8;
+    }
+    .btn-opt.correct {
+      background-color: #166534 !important;
+      border-color: #22c55e !important;
+    }
+    .btn-opt.wrong {
+      background-color: #991b1b !important;
+      border-color: #ef4444 !important;
+    }
+    .feedback {
+      height: 24px;
+      font-size: 15px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    .next-btn {
+      background-color: #0284c7;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .next-btn:hover {
+      background-color: #0369a1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="stats">
+    <span>Skor: <span id="score" style="color: #22c55e;">0</span></span>
+    <span>Pertanyaan: <span id="total-q">0</span></span>
+  </div>
+
+  <!-- Kontrol Volume & Booster -->
+  <div class="volume-control">
+    <span>🔊 Volume:</span>
+    <input type="range" id="volume-slider" min="0" max="2" step="0.1" value="1.5" oninput="updateVolume(this.value)">
+    <span id="volume-label" style="font-weight: bold; color: #38bdf8;">150%</span>
+  </div>
+
+  <div class="question-box">
+    <div class="question-type" id="q-type">Kategori Soal</div>
+    <div class="question-text" id="q-text">Pertanyaan...</div>
+  </div>
+
+  <div class="options-grid" id="options-container">
+    <!-- Tombol pilihan dimuat via JS -->
+  </div>
+
+  <div class="feedback" id="feedback-text"></div>
+  <button class="next-btn" id="next-btn" onclick="generateQuestion()" style="display: none;">Soal Berikutnya ➔</button>
+</div>
+
+<script>
+  const surahData = [
+    { no: 2, name: "Al-Baqarah", ayat: 286 },
+    { no: 18, name: "Al-Kahfi", ayat: 110 },
+    { no: 36, name: "Yā Sīn", ayat: 83 },
+    { no: 55, name: "Ar-Rahmān", ayat: 78 },
+    { no: 56, name: "Al-Wāqi'ah", ayat: 96 },
+    { no: 67, name: "Al-Mulk", ayat: 30 },
+    { no: 78, name: "An-Nabā'", ayat: 40 },
+    { no: 87, name: "Al-A'lā", ayat: 19 },
+    { no: 89, name: "Al-Fajr", ayat: 30 },
+    { no: 91, name: "Asy-Syams", ayat: 15 },
+    { no: 93, name: "Ad-Duha", ayat: 11 },
+    { no: 96, name: "Al-`Alaq", ayat: 19 }
+  ];
+
+  let score = 0;
+  let totalQuestions = 0;
+  let currentAnswer = "";
+  let isAnswered = false;
+
+  // Web Audio Context & Master Gain Node untuk Volume Boost
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const masterGain = audioCtx.createGain();
+  masterGain.connect(audioCtx.destination);
+  masterGain.gain.value = 1.5; // Default volume set ke 150%
+
+  function updateVolume(val) {
+    masterGain.gain.value = parseFloat(val);
+    document.getElementById("volume-label").innerText = Math.round(val * 100) + "%";
+  }
+
+  function playSound(isCorrect) {
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    
+    const osc = audioCtx.createOscillator();
+    const noteGain = audioCtx.createGain();
+    
+    osc.connect(noteGain);
+    noteGain.connect(masterGain);
+
+    if (isCorrect) {
+      // Suara Benar: Nada Ceria 2 Tingkat
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(783.99, audioCtx.currentTime + 0.12); // G5
+      
+      noteGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+      noteGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.35);
+    } else {
+      // Suara Salah: Sawtooth Bass Keras
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+      osc.frequency.linearRampToValueAtTime(90, audioCtx.currentTime + 0.25);
+      
+      noteGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+      noteGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.35);
+    }
+  }
+
+  function getRandomItem(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function shuffleArray(arr) {
+    return arr.sort(() => Math.random() - 0.5);
+  }
+
+  function generateQuestion() {
+    isAnswered = false;
+    document.getElementById("feedback-text").innerText = "";
+    document.getElementById("next-btn").style.display = "none";
+    
+    const target = getRandomItem(surahData);
+    const qTypes = ["no_to_name", "name_to_no", "name_to_ayat"];
+    const selectedType = getRandomItem(qTypes);
+    
+    let options = [];
+    let questionText = "";
+    let categoryText = "";
+
+    if (selectedType === "no_to_name") {
+      categoryText = "Tebak Nama Surah";
+      questionText = `Surah ke-${target.no} adalah?`;
+      currentAnswer = target.name;
+      options = [target.name];
+      while (options.length < 4) {
+        let rand = getRandomItem(surahData).name;
+        if (!options.includes(rand)) options.push(rand);
+      }
+    } else if (selectedType === "name_to_no") {
+      categoryText = "Tebak Nomor Surah";
+      questionText = `Surah ${target.name} nomor berapa?`;
+      currentAnswer = `Surah ke-${target.no}`;
+      options = [`Surah ke-${target.no}`];
+      while (options.length < 4) {
+        let rand = `Surah ke-${getRandomItem(surahData).no}`;
+        if (!options.includes(rand)) options.push(rand);
+      }
+    } else if (selectedType === "name_to_ayat") {
+      categoryText = "Tebak Jumlah Ayat";
+      questionText = `Surah ${target.name} berapa ayat?`;
+      currentAnswer = `${target.ayat} Ayat`;
+      options = [`${target.ayat} Ayat`];
+      while (options.length < 4) {
+        let rand = `${getRandomItem(surahData).ayat} Ayat`;
+        if (!options.includes(rand)) options.push(rand);
+      }
+    }
+
+    document.getElementById("q-type").innerText = categoryText;
+    document.getElementById("q-text").innerText = questionText;
+
+    options = shuffleArray(options);
+    const optionsContainer = document.getElementById("options-container");
+    optionsContainer.innerHTML = "";
+
+    options.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.className = "btn-opt";
+      btn.innerText = opt;
+      btn.onclick = () => checkAnswer(opt, btn);
+      optionsContainer.appendChild(btn);
+    });
+  }
+
+  function checkAnswer(selectedOpt, btnElement) {
+    if (isAnswered) return;
+    isAnswered = true;
+    totalQuestions++;
+
+    const allBtns = document.querySelectorAll(".btn-opt");
+    
+    if (selectedOpt === currentAnswer) {
+      score++;
+      playSound(true);
+      btnElement.classList.add("correct");
+      document.getElementById("feedback-text").style.color = "#22c55e";
+      document.getElementById("feedback-text").innerText = "Benar! 🎉";
+    } else {
+      playSound(false);
+      btnElement.classList.add("wrong");
+      document.getElementById("feedback-text").style.color = "#ef4444";
+      document.getElementById("feedback-text").innerText = `Salah! Jawaban: ${currentAnswer}`;
+      
+      allBtns.forEach(b => {
+        if (b.innerText === currentAnswer) {
+          b.classList.add("correct");
+        }
+      });
+    }
+
+    document.getElementById("score").innerText = score;
+    document.getElementById("total-q").innerText = totalQuestions;
+    document.getElementById("next-btn").style.display = "block";
+  }
+
+  generateQuestion();
+</script>
+
+</body>
+</html>
